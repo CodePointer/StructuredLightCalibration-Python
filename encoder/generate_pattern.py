@@ -44,12 +44,15 @@ def generate_gray_code_pats(digit_num, hei, wid):
 
 
 def generate_phase_pats(interval, hei, wid):
-    intensity_base = 127.50
-    intensity_max = 127.50
+    intensity_min = 100.0
+    intensity_max = 200.0
+
+    intensity_mid = (intensity_max + intensity_min) / 2.0
+    intensity_rad = (intensity_max - intensity_min) / 2.0
 
     theta = (np.arange(1, interval + 1) / interval * (2 * np.pi) - np.pi).reshape(1, -1)  # [0, interval] -> [-pi, pi]
     phi = np.array([0.0, (1 / 2) * np.pi, np.pi, (3 / 2) * np.pi], dtype=np.float32).reshape(-1, 1)
-    phase_set = intensity_base + intensity_max * np.sin(theta + phi)
+    phase_set = intensity_mid + intensity_rad * np.sin(theta + phi)
 
     step = wid // interval
     phase_set_part = phase_set.reshape(4, 1, interval)
@@ -62,6 +65,18 @@ def generate_base_pats(hei, wid):
     res = np.zeros([2, hei, wid], dtype=np.uint8)
     res[1] = 255
     return res
+
+
+def generate_all(digit, phase_step, hei, wid):
+    gray_pats = generate_gray_code_pats(digit, hei, wid)
+    gray_pats_inv = 255 - gray_pats
+    phase_pats = generate_phase_pats(phase_step, hei, wid)
+
+    return np.concatenate([
+        gray_pats,
+        gray_pats_inv,
+        phase_pats,
+    ], axis=0)
 
 
 def draw_patterns(pat_folder):
@@ -101,7 +116,7 @@ def draw_patterns(pat_folder):
 
 
 def main():
-    folder = Path('./data')
+    folder = Path('../data')
     # folder = Path('C:/SLDataSet/20220907real')
     pat_folder = folder / 'pat'
     draw_patterns(pat_folder)

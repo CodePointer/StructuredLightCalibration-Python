@@ -14,7 +14,10 @@ import numpy as np
 from pathlib import Path
 
 import pointerlib as plb
-from sensor.real import Flea3Camera, ExtendProjector
+# from sensor.virtual import VirtualCamera, VirtualProjector
+from sensor.virtual import VirtualSLSystem
+# from sensor.real import Flea3Camera, ExtendProjector
+from sensor.real import RealSLSystem
 
 
 # - Coding Part - #
@@ -79,29 +82,56 @@ def collect_data(camera, projector, wait_fun, confirm_fun, save_folder):
 
 
 def collect_real_data(folder, scene_num):
-    projector = ExtendProjector(screen_width=1920)
     pat_folder = folder / 'pat'
-    total_frm = len(list(pat_folder.glob('*.png')))
     pat_set = []
-    for i in range(total_frm):
+    for i in range(len(list(pat_folder.glob('*.png')))):
         pat = plb.imload(pat_folder / f'pat_{i}.png', flag_tensor=False)
         pat_set.append((pat * 255.0).astype(np.uint8))
-    projector.set_pattern_set(pat_set)
-    camera = Flea3Camera(cam_idx=0, avg_frame=4)
+    sl_system = RealSLSystem.create(
+        pattern_list=pat_set,
+        cam_idx=0,
+        avg_frame=4,
+        screen_width=1920
+    )
 
     for scene_idx in range(scene_num):
         print(f'Start collecting scene {scene_idx:02}...')
-        collect_data(
-            camera, projector, wait_fun=wait_fun_real,
-            confirm_fun=confirm_fun, save_folder=folder / f'scene_{scene_idx:02}' / 'img'
-        )
+        img_set = sl_system.capture_each()
+        for i, img in enumerate(img_set):
+            scene_folder = folder / f'scene_{scene_idx:02}'
+            plb.imsave(scene_folder / 'img' / f'img_{i}.png', img, mkdir=True)
+        print(f'\tFinished.')
+
+
+def collect_virtual_data(folder, scene_num):
+    pat_folder = folder / 'pat'
+    pat_set = []
+    for i in range(len(list(pat_folder.glob('*.png')))):
+        pat = plb.imload(pat_folder / f'pat_{i}.png', flag_tensor=False)
+        pat_set.append((pat * 255.0).astype(np.uint8))
+    sl_system = VirtualSLSystem.create(
+        pattern_list=pat_set,
+        calib_ini=folder / 'config.ini',
+        rad=0,
+        sigma=3.0
+    )
+
+    for scene_idx in range(scene_num):
+        print(f'Start rendering scene {scene_idx:02}...')
+        scene_folder = folder / f'scene_{scene_idx:02}'
+        depth = plb.imload(scene_folder / 'depth' / 'depth_0.png', scale=10.0).squeeze(0)
+        grey = plb.imload(scene_folder / 'texture' / 'texture_0.png')
+        img_set = sl_system.capture_each(depth, grey)
+        for i, img in enumerate(img_set):
+            plb.imsave(scene_folder / 'img' / f'img_{i}.png', img, mkdir=True)
         print(f'\tFinished.')
 
 
 def main():
-    # folder = Path(r'C:\SLDataSet\20220907real')
+    # folder = Path(r'C:\SLDataSet\20221005realsyn2')
     folder = Path('./data')
     collect_real_data(folder, scene_num=1)
+    # collect_virtual_data(folder, scene_num=1)
 
 
 if __name__ == '__main__':

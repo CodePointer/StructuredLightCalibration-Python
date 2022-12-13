@@ -44,3 +44,17 @@ class BaseProjector:
     def project(self, idx):
         self.current_idx = idx
         return self.patterns[idx]
+
+
+class BaseSLSystem:
+    def __init__(self, pattern_list, camera, projector):
+        self.patterns = pattern_list
+        self.camera = camera
+        self.projector = projector
+        self.projector.set_pattern_set(self.patterns)
+
+    def capture_each(self, *args, **kwargs):
+        raise NotImplementedError('Not implemented by BaseSLSystem.')
+
+    def capture_frames(self, *args, **kwargs):
+        raise NotImplementedError('Not implemented by BaseSLSystem.')

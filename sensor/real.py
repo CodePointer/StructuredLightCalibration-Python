@@ -11,9 +11,10 @@
 # - Package Imports - #
 import numpy as np
 import cv2
+import time
 
 import PySpin
-from sensor.base import BaseCamera, BaseProjector
+from sensor.base import BaseCamera, BaseProjector, BaseSLSystem
 
 
 # - Coding Part - #
@@ -49,14 +50,17 @@ class Flea3Camera(BaseCamera):
         self.img_size = (height, width)
 
         self.avg_frame = avg_frame
+
+        # self.init()
         pass
 
     def __del__(self):
+        # self.close()
         del self.camera
         self.cam_list.Clear()
         self.system.ReleaseInstance()
 
-    def capture_images(self, frame_num):
+    def init(self):
         # In order to access the node entries, they have to be casted to a pointer type (CEnumerationPtr here)
         node_acquisition_mode = PySpin.CEnumerationPtr(self.node_map.GetNode('AcquisitionMode'))
         if not PySpin.IsAvailable(node_acquisition_mode) or not PySpin.IsWritable(node_acquisition_mode):
@@ -78,8 +82,11 @@ class Flea3Camera(BaseCamera):
 
         self.camera.BeginAcquisition()
 
-        res = []
+    def close(self):
+        self.camera.EndAcquisition()
 
+    def capture_images(self, frame_num):
+        res = []
         for i in range(frame_num):
             image_result = self.camera.GetNextImage(1000)
             if image_result.IsIncomplete():
@@ -90,17 +97,17 @@ class Flea3Camera(BaseCamera):
                 # image_converted = processor.Convert(image_result, PySpin.PixelFormat_Mono8)
                 # -- Save -- #
                 img_u8 = image_result.GetNDArray().copy()
-                res.append(img_u8.astype(np.float32) / 255.0)
+                # res.append(img_u8.astype(np.float32) / 255.0)
+                res.append(img_u8)
                 image_result.Release()
-
-        self.camera.EndAcquisition()
         return res
 
     def capture(self):
         res = self.capture_images(self.avg_frame)
-        img_all = np.stack(res, axis=0)
+        # time.sleep(0.1)
+        img_all = np.stack(res, axis=0).astype(np.float32)
         img = img_all.sum(axis=0) / self.avg_frame
-        return (img * 255.0).astype(np.uint8)
+        return img.astype(np.uint8)
 
 
 class ExtendProjector(BaseProjector):
@@ -115,3 +122,36 @@ class ExtendProjector(BaseProjector):
         cv2.imshow(self.win_name, self.patterns[idx])
         cv2.waitKey(50)
         return super().project(idx)
+
+
+class RealSLSystem(BaseSLSystem):
+
+    def __init__(self, pattern_list, camera, projector):
+        super(RealSLSystem, self).__init__(pattern_list, camera, projector)
+
+    @staticmethod
+    def create(pattern_list, cam_idx, avg_frame, screen_width):
+        return RealSLSystem(
+            pattern_list,
+            Flea3Camera(cam_idx, avg_frame),
+            ExtendProjector(screen_width)
+        )
+
+    def capture_each(self):
+        res = []
+        for pat_idx in range(len(self.patterns)):
+            self.projector.project(pat_idx)
+            self.camera.init()
+            time.sleep(0.05)
+            img = self.camera.capture()
+            self.camera.close()
+            time.sleep(0.05)
+            res.append(img.copy())
+        return res
+
+    def capture_frames(self, pat_idx, frame_num, **kwargs):
+        self.projector.project(pat_idx)
+        self.camera.init()
+        res = self.camera.capture_images(frame_num)
+        self.camera.close()
+        return res

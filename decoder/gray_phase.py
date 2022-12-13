@@ -10,10 +10,9 @@
 
 # - Package Imports - #
 import numpy as np
-from pathlib import Path
 
 import pointerlib as plb
-from generate_pattern import generate_gray
+from encoder.generate_pattern import generate_gray
 
 
 # - Coding Part - #
@@ -70,7 +69,7 @@ def decode_mask(black, white):
     return mask
 
 
-def decode(folder):
+def decode_all(scene_folder):
     """
     pattern set:
         digit_wid = 8 (step=5):
@@ -87,63 +86,62 @@ def decode(folder):
             40, 41
         coord: hei_bias = 32.0
     """
-    pat_num = len(list((folder / 'pat').glob('*.png')))
+    # pat_num = len(list((pat_folder / 'pat').glob('*.png')))
     # pat_set = [plb.imload(folder / 'pat' / f'pat_{x}.png', flag_tensor=False) for x in range(pat_num)]
 
-    scene_num = len(list(folder.glob('scene_*')))
-    for scene_idx in range(scene_num):
-        scene_folder = folder / f'scene_{scene_idx:02}'
-        img_folder = scene_folder / 'img'
-        img_set = [plb.imload(img_folder / f'img_{x}.png', flag_tensor=False) for x in range(pat_num)]
+    img_folder = scene_folder / 'img_init'
+    img_num = len(list(img_folder.glob('*.png')))
+    img_set = [plb.imload(img_folder / f'img_{x}.png', flag_tensor=False) for x in range(img_num)]
 
-        # Horizontal
-        bin_interval = decode_gray(
-            gray_pat=img_set[0:8 - 1],
-            gray_pat_inv=img_set[8:16 - 1]
-        )  # digit = 7
-        phase_shift = decode_phase(
-            phase_pat=img_set[16:20],
-            interval=1.0
-        )  # phase = 40
-        coord_wid = decode_both(
-            bin_interval,
-            phase_shift,
-            gray_interval=10.0,
-            phase_interval=40.0
-        )
+    # Horizontal
+    bin_interval = decode_gray(
+        gray_pat=img_set[0:8 - 1],
+        gray_pat_inv=img_set[8:16 - 1]
+    )  # digit = 7
+    phase_shift = decode_phase(
+        phase_pat=img_set[16:20],
+        interval=1.0
+    )  # phase = 40
+    coord_wid = decode_both(
+        bin_interval,
+        phase_shift,
+        gray_interval=10.0,
+        phase_interval=40.0
+    )
 
-        # Vertical
-        bin_interval = decode_gray(
-            gray_pat=img_set[20:28 - 2],
-            gray_pat_inv=img_set[28:36 - 2]
-        )
-        phase_shift = decode_phase(
-            phase_pat=img_set[36:40],
-            interval=1.0
-        )
-        coord_hei = decode_both(
-            bin_interval,
-            phase_shift,
-            gray_interval=12.0,
-            phase_interval=32.0
-        )
-        coord_hei += 32.0
+    # Vertical
+    bin_interval = decode_gray(
+        gray_pat=img_set[20:28 - 2],
+        gray_pat_inv=img_set[28:36 - 2]
+    )
+    phase_shift = decode_phase(
+        phase_pat=img_set[36:40],
+        interval=1.0
+    )
+    coord_hei = decode_both(
+        bin_interval,
+        phase_shift,
+        gray_interval=12.0,
+        phase_interval=32.0
+    )
+    coord_hei += 32.0
 
-        mask_occ = decode_mask(
-            black=img_set[40],
-            white=img_set[41]
-        )
+    mask_occ = decode_mask(
+        black=img_set[40],
+        white=img_set[41]
+    )
 
-        plb.imsave(scene_folder / 'coord' / 'coord_x.png', coord_wid, scale=50.0, img_type=np.uint16, mkdir=True)
-        plb.imsave(scene_folder / 'coord' / 'coord_y.png', coord_hei, scale=50.0, img_type=np.uint16, mkdir=True)
-        plb.imsave(scene_folder / 'mask' / 'mask_occ.png', mask_occ, mkdir=True)
+    return coord_wid, coord_hei, mask_occ
+    # plb.imsave(scene_folder / 'coord' / 'coord_x.png', coord_wid, scale=50.0, img_type=np.uint16, mkdir=True)
+    # plb.imsave(scene_folder / 'coord' / 'coord_y.png', coord_hei, scale=50.0, img_type=np.uint16, mkdir=True)
+    # plb.imsave(scene_folder / 'mask' / 'mask_occ.png', mask_occ, mkdir=True)
 
 
-def main():
-    folder = Path('./data')
+# def main():
+#     folder = Path('../data')
     # folder = Path('C:/SLDataSet/20220907real')
-    decode(folder)
+    # decode(folder)
 
 
-if __name__ == '__main__':
-    main()
+# if __name__ == '__main__':
+#     main()

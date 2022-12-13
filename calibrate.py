@@ -64,11 +64,11 @@ def detect_chessboard(scene_folder, pattern_size, proj_size):
     return find_flag, corners, corner_proj
 
 
-def calibrate(folder, pattern_size=(11, 8), square_size=15, min_frame_num=15):
+def calibrate(folder, pattern_size=(11, 8), square_size=10, min_frame_num=10):
     scene_num = len(list(folder.glob('scene_*')))
 
     # 0. Get img_size and pat_size
-    sample_pat = plb.imload(folder / 'pat' / 'pat_0.png', flag_tensor=False)
+    sample_pat = plb.imload(folder.parent / 'pat' / 'pat_0.png', flag_tensor=False)
     proj_size = sample_pat.shape[-2:]
     sample_img = plb.imload(folder / 'scene_00' / 'img' / 'img_0.png', flag_tensor=False)
     cam_size = sample_img.shape[-2:]
@@ -104,7 +104,7 @@ def calibrate(folder, pattern_size=(11, 8), square_size=15, min_frame_num=15):
     err1, mtx1, dist1, _, _ = cv2.calibrateCamera(
         valid_frame['obj'],
         valid_frame['cam'],
-        cam_size,
+        (cam_size[1], cam_size[0]),
         None,
         None,
         flags=cv2.CALIB_FIX_K3 + cv2.CALIB_FIX_PRINCIPAL_POINT,
@@ -112,7 +112,7 @@ def calibrate(folder, pattern_size=(11, 8), square_size=15, min_frame_num=15):
     err2, mtx2, dist2, _, _ = cv2.calibrateCamera(
         valid_frame['obj'],
         valid_frame['pro'],
-        proj_size,
+        (proj_size[1], proj_size[0]),
         None,
         None,
         flags=cv2.CALIB_FIX_K3,
@@ -125,7 +125,7 @@ def calibrate(folder, pattern_size=(11, 8), square_size=15, min_frame_num=15):
         dist1,
         mtx2,
         dist2,
-        cam_size,
+        (cam_size[1], cam_size[0]),
         flags=cv2.CALIB_FIX_INTRINSIC,
     )
     print('End calibration.')
@@ -134,9 +134,11 @@ def calibrate(folder, pattern_size=(11, 8), square_size=15, min_frame_num=15):
     config = ConfigParser()
     if (folder / 'config.ini').exists():
         config.read(str(folder / 'config.ini'), encoding='utf-8')
+    else:
+        config.add_section('Calibration')
     calib_sec = config['Calibration']
-    calib_sec['img_size'] = f'{cam_size[0]},{cam_size[1]}'
-    calib_sec['pat_size'] = f'{proj_size[0]},{proj_size[1]}'
+    calib_sec['img_size'] = f'{cam_size[1]},{cam_size[0]}'
+    calib_sec['pat_size'] = f'{proj_size[1]},{proj_size[0]}'
 
     def mtx2str(matrix):
         fx, fy, dx, dy = matrix[0, 0], matrix[1, 1], matrix[0, 2], matrix[1, 2]
@@ -152,7 +154,8 @@ def calibrate(folder, pattern_size=(11, 8), square_size=15, min_frame_num=15):
 
 
 def main():
-    folder = Path('C:/SLDataSet/20220907real')
+    # folder = Path('C:/SLDataSet/20220907real')
+    folder = Path('./data/for_calib')
     calibrate(folder)
 
 
