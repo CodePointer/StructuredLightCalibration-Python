@@ -90,7 +90,27 @@ class WarpDisparityForm(QtWidgets.QMainWindow, Ui_Dialog):
         self.update_images()
 
 
+def tmp():
+    folder = Path(r'C:\SLDataSet\TADE\4_VirtualDataCutNaive')
+    disp_folder = folder / 'scene_0000' / 'disp'
+    img_folder = folder / 'scene_0000' / 'img'
+    pat_file = folder / 'pat' / 'pat_42.png'
+    mask_folder = folder / 'scene_0000' / 'mask'
+
+    warp_layer = plb.WarpLayer1D(384, 640)
+
+    pat = plb.imload(pat_file)
+    for frm_idx in range(32):
+        disp = plb.imload(disp_folder / f'disp_{frm_idx}.png', scale=1e2)
+        mask = plb.imload(mask_folder / f'mask_{frm_idx}.png')
+        img = warp_layer(disp.unsqueeze(0), pat.unsqueeze(0))[0]
+        img[mask == 0.0] = 0.0
+        plb.imsave(img_folder / f'img_{frm_idx}.png', img)
+    pass
+
+
 if __name__ == '__main__':
+    tmp()
     app = QtWidgets.QApplication(sys.argv)
     main_win = WarpDisparityForm()
     main_win.show()

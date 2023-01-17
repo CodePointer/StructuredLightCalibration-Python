@@ -97,7 +97,7 @@ def main():
     # img = cv2.resize(img, (wid // 2, hei // 2))
 
     # img = cv2.imread(r'C:\SLDataSet\TADE\3_RealData\scene_0001\img_init\img_42.png', cv2.IMREAD_GRAYSCALE)
-    img = cv2.imread(r'C:\SLDataSet\TADE\4_VirtualDataCut\scene_0000\img\img_0.png', cv2.IMREAD_GRAYSCALE)
+    img = cv2.imread(r'C:\SLDataSet\TADE\52_RealData\pat\pat_0.png', cv2.IMREAD_GRAYSCALE)
     # hei, wid = img.shape[-2:]
     # img = cv2.resize(img, (wid // 2, hei // 2))
     setting = BlobDetectionSetting(img, 'blob')

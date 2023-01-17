@@ -77,12 +77,17 @@ def load_shapes(shape_list, scale_range, color_range):
 
 def generate_background_pos(back_range, direct_range):
     pos_z = np.random.rand() * (back_range[1] - back_range[0]) + back_range[0]
-    norm_xy = (np.random.rand(2) - 0.5) * direct_range * 2
+    norm_xy = -(np.random.rand(2) - 0.5) * direct_range * 2
     norm_vec = np.array([*norm_xy, 1.0], dtype=np.float32)
     norm_vec /= np.linalg.norm(norm_vec)
     pos = plb.PosManager()
-    pos.set_trans(np.array([0.0, 0.0, pos_z], dtype=np.float32))
-    pos.set_rot(rotvec=norm_vec * np.pi * 2)
+    pos.set_from_look(
+        pos=np.array([0.0, 0.0, pos_z], dtype=np.float32),
+        look=-norm_vec,
+        up=-np.array([1.0, 0.0, 0.0], dtype=np.float32)
+    )
+    # pos.set_trans(np.array([0.0, 0.0, pos_z], dtype=np.float32))
+    # pos.set_rot(rotvec=norm_vec * np.pi * 2)  # TODO: Bug for rotation.
     return pos
 
 
@@ -131,7 +136,7 @@ def generate_trajectories(obj_num, frm_num, pos_range, lin_vel_para, ang_vel_par
 def main():
 
     # Parameters:
-    main_path = Path('C:/SLDataSet/TADE/2_VirtualData')
+    main_path = Path('C:/SLDataSet/TADE/21_VirtualData')
     seed = 1024
     shape_path = Path('D:/ShapeNetv2/ShapeNetCore.v2')
     obj_class = {
@@ -147,14 +152,14 @@ def main():
         'sofa': '04256520',
     }
     calib_tag = 'RectCalib'
-    total_sequence = 300  # 2 ** 11 + 2 ** 9
+    total_sequence = 2 ** 11 + 2 ** 9
     frm_len = 32
     object_num = 4
     scale_range = np.array([60.0, 80.0], dtype=np.float32)
     color_range = np.array([0.2, 0.8], dtype=np.float32)
-    pos_range = np.array([[0, -50, -900], [150, 100, -1000]], dtype=np.float32)
-    back_range = np.array([-1000, -1200], dtype=np.float32)
-    direct_range = np.array([0.1], dtype=np.float32)
+    pos_range = np.array([[0, -50, -400], [150, 100, -550]], dtype=np.float32)
+    back_range = np.array([-550, -700], dtype=np.float32)
+    direct_range = np.array([0.2, 0.2], dtype=np.float32)
     lin_vel_para = np.array([2.0, 1.0], dtype=np.float32)
     ang_vel_para = np.array([0.05, 0.01], dtype=np.float32)
     norm_vel_para = np.array([0.05], dtype=np.float32)
@@ -202,7 +207,7 @@ def main():
     projector.extrinsic = projector_extrinsic
     ctr = vis.get_view_control()
     ctr.set_constant_z_far(1500)
-    ctr.set_constant_z_near(400)
+    ctr.set_constant_z_near(300)
 
     print('Open 3D window prepared.')
 
@@ -210,19 +215,20 @@ def main():
     print(f'Found {len(obj_path_set)} objects.')
 
     # Save
-    if not config.has_section('VirtualGenerator'):
-        config.add_section('VirtualGenerator')
-    config['VirtualData']['calib_tag'] = f'{calib_tag}'
-    config['VirtualData']['seed'] = f'{seed}'
-    config['VirtualData']['object_num'] = f'{object_num}'
-    config['VirtualData']['scale_range'] = plb.array2str(scale_range)
-    config['VirtualData']['color_range'] = plb.array2str(color_range)
-    config['VirtualData']['pos_range'] = plb.array2str(pos_range)
-    config['VirtualData']['back_range'] = plb.array2str(back_range)
-    config['VirtualData']['direct_range'] = plb.array2str(direct_range)
-    config['VirtualData']['lin_vel_para'] = plb.array2str(lin_vel_para)
-    config['VirtualData']['ang_vel_para'] = plb.array2str(ang_vel_para)
-    config['VirtualData']['norm_vel_para'] = plb.array2str(norm_vel_para)
+    save_sect_name = 'VirtualGenerator'
+    if not config.has_section(save_sect_name):
+        config.add_section(save_sect_name)
+    config[save_sect_name]['calib_tag'] = f'{calib_tag}'
+    config[save_sect_name]['seed'] = f'{seed}'
+    config[save_sect_name]['object_num'] = f'{object_num}'
+    config[save_sect_name]['scale_range'] = plb.array2str(scale_range)
+    config[save_sect_name]['color_range'] = plb.array2str(color_range)
+    config[save_sect_name]['pos_range'] = plb.array2str(pos_range)
+    config[save_sect_name]['back_range'] = plb.array2str(back_range)
+    config[save_sect_name]['direct_range'] = plb.array2str(direct_range)
+    config[save_sect_name]['lin_vel_para'] = plb.array2str(lin_vel_para)
+    config[save_sect_name]['ang_vel_para'] = plb.array2str(ang_vel_para)
+    config[save_sect_name]['norm_vel_para'] = plb.array2str(norm_vel_para)
 
     if not config.has_section('Data'):
         config.add_section('Data')
@@ -236,8 +242,10 @@ def main():
     print(f'Config file has been written.')
 
     # Rendering data
+    pbar = tqdm(total=total_sequence * frm_len)
     for seq_idx in range(total_sequence):
         seq_folder = main_path / f'scene_{seq_idx:04}'
+        pbar.set_description(desc=seq_folder.name)
 
         # Select <object_num> object
         objects = load_shapes(
@@ -263,8 +271,8 @@ def main():
         pos = generate_background_pos(back_range, direct_range)
         back_wall.transform(pos.get_4x4mat())
 
-        for frm_idx in tqdm(range(frm_len), desc=seq_folder.name):
-
+        for frm_idx in range(frm_len):
+            pbar.update(1)
             for obj_idx in range(object_num):
                 pos_lst = plb.PosManager() if frm_idx == 0 else pos_sets[obj_idx][frm_idx - 1]
                 pos_now = pos_sets[obj_idx][frm_idx]
@@ -284,10 +292,13 @@ def main():
             vis.poll_events()
             vis.update_renderer()
             time.sleep(0.01)
+            # vis.run()
+
             depth_cam = np.asarray(vis.capture_depth_float_buffer()).copy()
             depth_cam[np.isnan(depth_cam)] = 0.0
             disp_cam = focal_len * baseline / depth_cam
             disp_cam[depth_cam == 0.0] = 0.0
+            # plb.imviz(disp_cam, normalize=[])
             img_cam = np.asarray(vis.capture_screen_float_buffer()).copy()
             # gray_cam = cv2.cvtColor(img_cam, cv2.COLOR_RGB2GRAY)
 
@@ -310,20 +321,14 @@ def main():
             mask_occ = torch.ones_like(depth_cam_cuda)
             mask_occ[depth_cam_cuda == 0.0] = 0.0
             mask_occ[depth_proj_wrp == 0.0] = 0.0
-            mask_occ[torch.abs(diff) > 2.0] = 0.0
+            mask_occ[torch.abs(diff) > 4.0] = 0.0
             mask_occ = plb.a2t(mask_occ.squeeze())
 
             # Save
             plb.imsave(seq_folder / 'disp' / f'disp_{frm_idx}.png', disp_cam,
                        scale=1e2, img_type=np.uint16, mkdir=True)
-            # plb.imsave(seq_folder / 'disp_proj' / f'disp_{frm_idx}.png', disp_proj,
-            #            scale=1e2, img_type=np.uint16, mkdir=True)
             plb.imsave(seq_folder / 'rgb' / f'rgb_{frm_idx}.png', img_cam, mkdir=True)
             plb.imsave(seq_folder / 'mask' / f'mask_{frm_idx}.png', mask_occ, mkdir=True)
-            # plb.imsave(seq_folder / 'depth' / f'depth_{frm_idx}.png', depth_cam,
-            #            scale=10.0, img_type=np.uint16, mkdir=True)
-            # plb.imsave(seq_folder / 'depth_proj' / f'depth_{frm_idx}.png', depth_proj,
-            #            scale=10.0, img_type=np.uint16, mkdir=True)
 
         vis.clear_geometries()
 

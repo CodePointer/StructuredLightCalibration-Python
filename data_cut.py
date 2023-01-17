@@ -16,15 +16,19 @@ from tqdm import tqdm
 import cv2
 import numpy as np
 import torch
+import shutil
 
 import pointerlib as plb
 from decoder.gray_phase import decode_gray, decode_phase, decode_both, decode_mask
 
 
 # - Coding Part - #
-def cal_disp_mask(main_folder, refresh=False):
+def cal_disp_mask(main_folder, refresh=True):
     scene_folders = sorted(list(main_folder.glob('scene_*')))
     for scene_folder in tqdm(scene_folders):
+        if scene_folder.name != 'scene_0003':
+            continue
+
         img_folder = scene_folder / 'img_init'
         disp_folder = scene_folder / 'disp'
         mask_folder = scene_folder / 'mask'
@@ -66,17 +70,10 @@ def cal_disp_mask(main_folder, refresh=False):
         plb.imsave(mask_folder / 'mask_0.png', mask_occ, mkdir=True)
 
 
-def main():
+def data_cut(src_folder, dst_folder, data_tag, roi, scale, clean_type):
     # src_folder = Path('C:/SLDataSet/TADE/2_VirtualData')
     # dst_folder = Path('C:/SLDataSet/TADE/4_VirtualDataCut')
     # data_tag = 'VirtualData'
-    src_folder = Path('C:/SLDataSet/TADE/3_RealData')
-    dst_folder = Path('C:/SLDataSet/TADE/5_RealDataCut')
-    data_tag = 'Data'
-    roi = (0, 768, 0, 1280)  # [h_from, h_to, w_from, w_to]
-    scale = 0.5
-    clean_type = ['disp', 'img', 'mask']
-
     config = ConfigParser()
     config.read(str(src_folder / 'config.ini'), encoding='utf-8')
     h_s, h_e, w_s, w_e = roi
@@ -103,6 +100,7 @@ def main():
     config[data_tag]['pat_intrin'] = ','.join([str(x * scale) for x in pat_intrin])
     config[data_tag]['ext_rot'] = config[calib_tag]['ext_rot']
     config[data_tag]['ext_tran'] = config[calib_tag]['ext_tran']
+    dst_folder.mkdir(exist_ok=True, parents=True)
     with open(str(dst_folder / 'config.ini'), 'w+', encoding='utf-8') as file:
         config.write(file)
 
@@ -116,12 +114,13 @@ def main():
         cv2.imwrite(str(dst_name), img_cut_re)
 
     # Pattern
-    src_pat_folder = src_folder / 'pat'
-    for src_pat_file in tqdm(src_pat_folder.glob('*.png'), desc=src_pat_folder.name):
-        dst_pat_file = dst_folder / 'pat' / src_pat_file.name
-        cut(src_pat_file, dst_pat_file)
+    # src_pat_folder = src_folder / 'pat'
+    # for src_pat_file in tqdm(src_pat_folder.glob('*.png'), desc=src_pat_folder.name):
+    #     dst_pat_file = dst_folder / 'pat' / src_pat_file.name
+    #     cut(src_pat_file, dst_pat_file)
 
     # Cut & Save
+    reverse_flag = 0
     src_scene_folders = sorted([x for x in src_folder.glob('scene_*') if x.is_dir()])
     for scene_idx, src_scene_folder in enumerate(src_scene_folders):
         dst_scene_folder = dst_folder / src_scene_folder.name
@@ -136,13 +135,69 @@ def main():
             for img_type in clean_type:
                 src_img_file = src_scene_folder / img_type / f'{img_type}_{src_frm_idx}.png'
                 dst_img_file = dst_scene_folder / img_type / f'{img_type}_{dst_frm_idx}.png'
+                # src_img_file = src_scene_folder / img_type / f'img_{src_frm_idx}.png'
+                # dst_img_file = dst_scene_folder / img_type / f'img_{dst_frm_idx}.png'
                 if src_img_file.exists():
                     cut(src_img_file, dst_img_file, scale_flag=(img_type == 'disp'))
 
     pass
 
 
+def temp_move_folders(src_folder, dst_folder, item_set):
+    # 1. Move pattern
+    # shutil.copytree(
+    #     src=str(src_folder / 'pat'),
+    #     dst=str(dst_folder / 'pat')
+    # )
+    # shutil.copy(
+    #     src=str(src_folder / 'config.ini'),
+    #     dst=str(dst_folder / 'config.ini')
+    # )
+
+    # 2. Move items
+    scene_num = len(list(src_folder.glob('scene_*')))
+    for scene_idx in tqdm(range(scene_num)):
+        src_scene_folder = src_folder / f'scene_{scene_idx:04}'
+        dst_scene_folder = dst_folder / f'scene_{scene_idx:04}'
+        dst_scene_folder.mkdir(parents=False, exist_ok=True)
+        for item in item_set:
+            # shutil.rmtree(
+            #     str(src_scene_folder / item),
+            #     ignore_errors=True
+            # )
+            shutil.rmtree(
+                path=str(dst_scene_folder / 'img'),
+                ignore_errors=True
+            )
+            shutil.copytree(
+                src=str(src_scene_folder / 'img_raw'),
+                dst=str(dst_scene_folder / 'img'),
+            )
+            shutil.rmtree(
+                path=str(src_scene_folder / 'img_raw'),
+                ignore_errors=True,
+            )
+
+            # shutil.copytree(
+            #     src=str(src_scene_folder / item),
+            #     dst=str(dst_scene_folder / item),
+            # )
+
+    pass
+
+
 if __name__ == '__main__':
     # cal_disp_mask(Path('C:/SLDataSet/TADE/3_RealData'))
-    # temp(Path('C:/SLDataSet/TADE/4_VirtualDataCut'))
-    main()
+    temp_move_folders(
+        src_folder=Path('C:/SLDataSet/TADE/21_VirtualData'),
+        dst_folder=Path('C:/SLDataSet/TADE/21_VirtualData'),
+        item_set=['mask_center'],
+    )
+    # data_cut(
+    #     src_folder=Path('C:/SLDataSet/TADE/2_VirtualData'),
+    #     dst_folder=Path('C:/SLDataSet/TADE/4_VirtualDataCut'),
+    #     data_tag='Data',
+    #     roi=(0, 768, 0, 1280),  # [h_from, h_to, w_from, w_to]
+    #     scale=0.5,
+    #     clean_type=['rgb']  # 'disp', 'img', 'mask']
+    # )

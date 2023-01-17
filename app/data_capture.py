@@ -21,6 +21,7 @@ import numpy as np
 import cv2
 import time
 import winsound
+import torch
 
 from ui.data_capture import Ui_Dialog
 from sensor.virtual import VirtualSLSystem
@@ -94,11 +95,11 @@ class DataCaptureForm(QtWidgets.QMainWindow, Ui_Dialog):
         # Set timer for real-time updating
         # self.timer = QtCore.QTimer()
         # self.timer.timeout.connect(self.update_realtime)
-        # self.run_all()
+        self.run_all()
 
     def run_all(self):
         # Set main_folder
-        self.main_folder = Path('C:/SLDataSet/TADE/2_VirtualData')
+        self.main_folder = Path('C:/SLDataSet/TADE/21_VirtualData')
         self.update_folders()
         print(f'main_folder: {self.main_folder}')
 
@@ -111,7 +112,9 @@ class DataCaptureForm(QtWidgets.QMainWindow, Ui_Dialog):
             print(f'Processing {self.scene_folder.name}...', end='', flush=True)
 
             # Capture dynamic
-            self.capture_dynamic(len(list((self.scene_folder / 'disp').glob('*.png'))), hint=False)
+            self.capture_dynamic(len(list((self.scene_folder / 'disp').glob('*.png'))),
+                                 fl=429.5893249511719 * 218.10832668206814,
+                                 hint=False)
 
             # Save
             self.save(True)
@@ -149,14 +152,14 @@ class DataCaptureForm(QtWidgets.QMainWindow, Ui_Dialog):
             winsound.Beep(1024, 100)
             time.sleep(0.1)
 
-    def capture_dynamic(self, frm_len, hint=True):
+    def capture_dynamic(self, frm_len, fl=None, hint=True):
         # self.status = ProgramStatus.COLLECTING
         # self.timer.stop()
         if self.CheckBoxVirtualFlag.isChecked():
             depth_list, grey_list, mask_list = [], [], []
             for frm_idx in range(frm_len):
                 disp_cam = plb.imload(self.scene_folder / 'disp' / f'disp_{frm_idx}.png', scale=1e2).cuda()
-                depth_cam = 1802.855858 * 256.018378 / disp_cam
+                depth_cam = fl / disp_cam
                 depth_cam[disp_cam == 0.0] = 0.0
                 # depth_cam = plb.imload(self.scene_folder / 'depth' / f'depth_{frm_idx}.png', scale=10.0).cuda()
                 depth_list.append(depth_cam)
@@ -337,11 +340,6 @@ class DataCaptureForm(QtWidgets.QMainWindow, Ui_Dialog):
         self.LabelCurrentFrame.setText(f'{value}')
         self.flush_img()
         pass
-
-
-def run_without_ui(argv):
-    main_window = DataCaptureForm()
-    main_window.show()
 
 
 def run_with_ui(argv):
