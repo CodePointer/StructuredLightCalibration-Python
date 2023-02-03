@@ -13,7 +13,8 @@
 import numpy as np
 from pathlib import Path
 from configparser import ConfigParser
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
+import open3d as o3d
 
 import pointerlib as plb
 
@@ -80,10 +81,45 @@ def compute_point_cloud(folder):
         pass
 
 
+def disparity_visualization(folder):
+    # Load calibrated information
+    config = ConfigParser()
+    config.read(str(folder / 'config.ini'), encoding='utf-8')
+    calib_tag = config['Data']['calib_tag']
+    focal_len = float(config[calib_tag]['focal_len'])
+    baseline = float(config[calib_tag]['baseline'])
+    _, _, dx, dy = plb.str2tuple(config[calib_tag]['img_intrin'], item_type=float)
+    wid, hei = plb.str2tuple(config[calib_tag]['img_size'], item_type=int)
+
+    scene_num = len(list(folder.glob('scene_*')))
+    for scene_idx in range(scene_num):
+        scene_folder = folder / f'scene_{scene_idx:04}'
+        
+        frm_idx = 255
+        disp = plb.imload(scene_folder / 'disp_gt' / f'disp_{frm_idx}.png', 
+                          scale=1e2, flag_tensor=False)
+        h_vec, w_vec = np.where(disp > 0)
+        disp_vec = disp[h_vec, w_vec]
+        
+        zz = focal_len * baseline / disp_vec
+        xx = (w_vec.astype(np.float32) - dx) / focal_len * zz
+        yy = (h_vec.astype(np.float32) - dy) / focal_len * zz
+        
+        xyz_np = np.stack([xx, yy, zz], axis=1)
+        
+        pcd = o3d.geometry.PointCloud()
+        pcd.points = o3d.utility.Vector3dVector(xyz_np)
+        
+        o3d.visualization.draw_geometries([pcd])
+        pass
+    pass
+
+
 def main():
-    # folder = Path(r'C:\SLDataSet\20221028real')
-    folder = Path('./data')
-    compute_point_cloud(folder)
+    folder = Path('E:/SLDataSet/TADE/52_RealData')
+    # folder = Path('./data')
+    # compute_point_cloud(folder)
+    disparity_visualization(folder)
 
 
 if __name__ == '__main__':
