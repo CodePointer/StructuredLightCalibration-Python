@@ -10,6 +10,7 @@
 
 # - Package Imports - #
 import numpy as np
+import cv2
 
 from pathlib import Path
 import pointerlib as plb
@@ -36,10 +37,20 @@ def generate_gray(digit_num):
 
 def generate_gray_code_pats(digit_num, hei, wid):
     gray_code = generate_gray(digit_num)  # [2 ** digit_num, digit_num]
-    step = wid // (2 ** digit_num)
+
+    digit_total = 2 ** digit_num
+    wid_total = digit_total * wid // np.gcd(wid, digit_total)
+    step = wid_total // digit_total
+
     gray_mat_base = gray_code.transpose()  # [digit_num, 2 ** digit_num]
     gray_mat_base = gray_mat_base.reshape([digit_num, 1, -1])
     gray_mat = gray_mat_base.repeat(step, axis=2).repeat(hei, axis=1).astype(np.uint8) * 255
+
+    if wid != wid_total:
+        gray_mat_raw = gray_mat.transpose([1, 2, 0])
+        gray_mat = cv2.resize(gray_mat_raw, (wid, hei), interpolation=cv2.INTER_LINEAR)
+        gray_mat = gray_mat.transpose([2, 0, 1])
+
     return gray_mat
 
 
@@ -115,11 +126,81 @@ def draw_patterns(pat_folder):
         plb.imsave(pat_folder / f'pat_{idx}.png', all_pats_out[idx], scale=1.0, mkdir=True)
 
 
+def random_array_square(hei, wid, square_size, pat_num, boundary_flag=True):
+    np.random.seed(42 * pat_num)
+    if boundary_flag:
+        total_bins = 2 ** pat_num
+        bin_range = range(total_bins)
+    else:
+        total_bins = 2 ** pat_num - 2
+        bin_range = range(1, 2 ** pat_num - 1)
+
+    sq_hei = hei // square_size
+    sq_wid = wid // square_size
+    sq_len = sq_hei * sq_wid
+    idx_interval = sq_len // total_bins
+    format_str = '{' + f':0{pat_num}b' + '}'
+
+    rand_idx = np.argsort(np.random.rand(sq_len))
+
+    sq_array = np.zeros([pat_num, sq_len], dtype=np.float32)
+    for i in bin_range:
+        start_idx = (i - bin_range.start) * idx_interval
+        end_idx = (i - bin_range.start + 1) * idx_interval if i < bin_range.stop - 1 else len(rand_idx)
+        idx_fill = rand_idx[start_idx:end_idx]
+        fill_array = np.array([float(x) for x in format_str.format(i)], dtype=np.float32).reshape(-1, 1)
+        sq_array[:, idx_fill] = fill_array
+
+    sq_array = sq_array.reshape([pat_num, sq_hei, sq_wid])
+    sq_mat = sq_array.repeat(square_size, axis=1).repeat(square_size, axis=2)
+    return sq_mat
+
+
+def marker_square(hei, wid, square_size, line_size):
+    square = np.zeros([3, square_size, square_size], dtype=np.float32)
+    square[0, (square_size - line_size) // 2:(square_size + line_size) // 2, :] = 1.0
+    square[1, :, (square_size - line_size) // 2:(square_size + line_size) // 2] = 1.0
+    square[2] = np.min(square[:2], axis=0)
+    marker_array = np.tile(square, (1, hei // square_size, wid // square_size))
+    return marker_array
+
+
 def main():
-    folder = Path('../data')
+    folder = Path('./data')
     # folder = Path('C:/SLDataSet/20220907real')
     pat_folder = folder / 'pat'
-    draw_patterns(pat_folder)
+    # draw_patterns(pat_folder)
+
+    # Gray Codes
+    # wid = 1280
+    # hei = 800
+    # digit_num = 11
+    # gray_mat = generate_gray_code_pats(digit_num, hei, wid) / 255 * 100 + 100
+    # gray_mat_inv = 200 - (gray_mat - 100)
+    # for i in range(digit_num):
+    #     plb.imsave(pat_folder / f'pat_gc{i}.png', gray_mat[i], scale=1.0)
+    #     plb.imsave(pat_folder / f'pat_gc{i}inv.png', gray_mat_inv[i], scale=1.0)
+    # gray_mat = generate_gray_code_pats(digit_num, wid, hei).transpose([0, 2, 1]) / 255 * 100 + 100
+    # gray_mat_inv = 200 - (gray_mat - 100)
+    # for i in range(digit_num):
+    #     plb.imsave(pat_folder / f'pat_gch{i}.png', gray_mat[i], scale=1.0)
+    #     plb.imsave(pat_folder / f'pat_gch{i}inv.png', gray_mat_inv[i], scale=1.0)
+
+    wid = 1280
+    hei = 800
+    square_size = 3
+    line_size = 6
+    res = random_array_square(hei // 4, wid, square_size, 6, boundary_flag=False)
+    res_raw = np.concatenate([res] * 4, axis=1)
+    res = np.zeros([6, hei, wid], dtype=res_raw.dtype)
+    res[:, :res_raw.shape[1], :res_raw.shape[2]] = res_raw
+    for i in range(6):
+        plb.imsave(pat_folder / f'pat_arr{square_size}r{i}.png', res[i])
+        plb.imsave(pat_folder / f'pat_arr{square_size}r{i}inv.png', 1.0 - res[i])
+    # res_mk = marker_square(hei, wid, square_size, line_size)
+    # for i in range(res_mk.shape[0]):
+    #     plb.imsave(pat_folder / f'pat_mk{square_size}s{i}.png', res_mk[i])
+    #     plb.imsave(pat_folder / f'pat_mk{square_size}s{i}inv.png', 1.0 - res_mk[i])
 
 
 if __name__ == '__main__':

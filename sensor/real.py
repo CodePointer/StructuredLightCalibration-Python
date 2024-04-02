@@ -111,12 +111,15 @@ class Flea3Camera(BaseCamera):
 
 
 class ExtendProjector(BaseProjector):
-    def __init__(self, screen_width=1920):
+    def __init__(self, screen_width=2560):
         super().__init__()
         self.win_name = 'Projected_Pattern'
         cv2.namedWindow(self.win_name)
+        # cv2.waitKey(1000)
         cv2.moveWindow(self.win_name, screen_width, 0)
+        cv2.waitKey(1000)
         cv2.setWindowProperty(self.win_name, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
+        cv2.waitKey(1000)
 
     def project(self, idx):
         cv2.imshow(self.win_name, self.patterns[idx])

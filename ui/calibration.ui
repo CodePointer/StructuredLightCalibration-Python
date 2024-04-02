@@ -417,7 +417,7 @@
     <string>Run</string>
    </property>
   </widget>
-  <widget class="QRadioButton" name="RadioButtonValid">
+  <widget class="QCheckBox" name="CheckBoxValid">
    <property name="geometry">
     <rect>
      <x>600</x>
@@ -484,7 +484,7 @@
     <string>0.0</string>
    </property>
   </widget>
-  <widget class="QRadioButton" name="RadioButtonDetectChessLoad">
+  <widget class="QCheckBox" name="CheckBoxDetectChessLoad">
    <property name="geometry">
     <rect>
      <x>630</x>

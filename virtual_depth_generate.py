@@ -136,9 +136,9 @@ def generate_trajectories(obj_num, frm_num, pos_range, lin_vel_para, ang_vel_par
 def main():
 
     # Parameters:
-    main_path = Path('C:/SLDataSet/TADE/21_VirtualData')
-    seed = 1024
-    shape_path = Path('D:/ShapeNetv2/ShapeNetCore.v2')
+    main_path = Path('C:/SLDataSet/TADE/31_VirtualDataEval')
+    seed = 114514  # 1024
+    shape_path = Path('C:/SLDataSet/ShapeNetv2')
     obj_class = {
         'hat': '02954340',
         'trashcan': '02747177',
@@ -152,8 +152,8 @@ def main():
         'sofa': '04256520',
     }
     calib_tag = 'RectCalib'
-    total_sequence = 2 ** 11 + 2 ** 9
-    frm_len = 32
+    total_sequence = 8  # 2 ** 11 + 2 ** 9
+    frm_len = 256  # 32
     object_num = 4
     scale_range = np.array([60.0, 80.0], dtype=np.float32)
     color_range = np.array([0.2, 0.8], dtype=np.float32)

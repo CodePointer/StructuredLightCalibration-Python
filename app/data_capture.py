@@ -29,6 +29,17 @@ from sensor.real import RealSLSystem
 
 
 # - Coding Part - #
+def cv2pixmap(cv_img, scale=4.0):
+    hei, wid = cv_img.shape[-2:]
+    hei, wid = int(hei // scale), int(wid // scale)
+    cv_img = cv2.resize(cv_img, (wid, hei))
+    if len(cv_img.shape) == 3:
+        qt_img = QtGui.QImage(cv_img.data, wid, hei, wid * 3, QtGui.QImage.Format_RGB888).rgbSwapped()
+    else:
+        qt_img = QtGui.QImage(cv_img.data, wid, hei, wid, QtGui.QImage.Format_Grayscale8)
+    return QtGui.QPixmap.fromImage(qt_img)
+
+
 class ProgramStatus(Enum):
     UNLOADED = 0
     # LOADED = 1
@@ -48,6 +59,7 @@ class DataCaptureForm(QtWidgets.QMainWindow, Ui_Dialog):
         # For data collection
         self.pat_idx = 0
         self.pattern_list = []
+        self.pattern_tag = []
         self.captured_images = []
         self.flag_static = False
         self.sl_system = None
@@ -63,7 +75,7 @@ class DataCaptureForm(QtWidgets.QMainWindow, Ui_Dialog):
         # Data folder path for saving
         self.scene_num = 0
         self.frm_len = 2048
-        self.main_folder = Path('C:/SLDataSet/TADE/')
+        self.main_folder = Path('C:/SLDataSet/SLNeRF/')
         self.scene_folder = Path('.')
         self.pattern_folder = Path('.')
         self.rect_para = None
@@ -95,11 +107,11 @@ class DataCaptureForm(QtWidgets.QMainWindow, Ui_Dialog):
         # Set timer for real-time updating
         # self.timer = QtCore.QTimer()
         # self.timer.timeout.connect(self.update_realtime)
-        self.run_all()
+        # self.run_all()
 
     def run_all(self):
         # Set main_folder
-        self.main_folder = Path('C:/SLDataSet/TADE/21_VirtualData')
+        self.main_folder = Path('C:/SLDataSet/TADE/31_VirtualDataEval')
         self.update_folders()
         print(f'main_folder: {self.main_folder}')
 
@@ -205,28 +217,29 @@ class DataCaptureForm(QtWidgets.QMainWindow, Ui_Dialog):
         self.captured_images += self.sl_system.capture_each(**self.sl_params['each'])
         self.flag_static = True
         self.HorizontalSliderTimeLine.setMaximum(len(self.captured_images) - 1)
-        if hint:
-            self.finish_beep()
+        # if hint:
+        self.finish_beep()
         pass
 
     def load(self):
         self.ComboBoxPatternIdx.clear()
-        pattern_nums = len(list(self.pattern_folder.glob('*.png')))
-        for i in range(pattern_nums):
-            pat = plb.imload(self.pattern_folder / f'pat_{i}.png', flag_tensor=False)
+        pattern_path_list = list(self.pattern_folder.glob('*.png'))
+        for pattern_path in pattern_path_list:
+            pat = plb.imload(pattern_path, flag_tensor=False)
             self.pattern_list.append((pat * 255.0).astype(np.uint8))
+            self.pattern_tag.append(pattern_path.stem.split('_')[1])
 
         if (self.main_folder / 'rect_map.npz').exists():
             self.rect_para = np.load(str(self.main_folder / 'rect_map.npz'))
 
-        self.ComboBoxPatternIdx.addItems([str(i) for i in range(pattern_nums)])
+        self.ComboBoxPatternIdx.addItems([str(i) for i in range(len(self.pattern_tag))])
         self.CheckBoxVirtualFlag.setDisabled(True)
         if not self.CheckBoxVirtualFlag.isChecked():
             self.sl_system = RealSLSystem.create(
                 self.pattern_list,
                 0,
                 4,
-                1920
+                2560,  # TODO: Resolution of your device
             )
         else:
             self.sl_system = VirtualSLSystem.create(
@@ -236,7 +249,11 @@ class DataCaptureForm(QtWidgets.QMainWindow, Ui_Dialog):
                 rad=4,
                 sigma=1.0
             )
-        self.log_output(f'Loaded {pattern_nums} patterns.')
+
+        if self.sl_system is None:
+            raise AssertionError('SLS system created failed.')
+
+        self.log_output(f'Loaded {len(pattern_path_list)} patterns.')
 
     def open(self):
         self.capture_dynamic(1, hint=False)
@@ -250,7 +267,8 @@ class DataCaptureForm(QtWidgets.QMainWindow, Ui_Dialog):
             for i, img in enumerate(self.captured_images):
                 img_rect = self._rectify(img, 'cam')
                 if i < static_init_len:
-                    plb.imsave(self.scene_folder / 'img_init_raw' / f'img_{i}.png', img, scale=1.0, mkdir=True)
+                    pat_tag = self.pattern_tag[i]
+                    plb.imsave(self.scene_folder / 'img' / f'img_{pat_tag}.png', img, scale=1.0, mkdir=True)
                     if img_rect is not None:
                         plb.imsave(self.scene_folder / 'img_init' / f'img_{i}.png', img_rect,
                                    scale=1.0, mkdir=True)
@@ -275,7 +293,7 @@ class DataCaptureForm(QtWidgets.QMainWindow, Ui_Dialog):
     def flush_img(self):
         # Show captured images & patterns
         if 0 <= self.img_idx < len(self.captured_images):
-            self.ViewCameraImage.setPixmap(plb.cv2pixmap(self.captured_images[self.img_idx]))
+            self.ViewCameraImage.setPixmap(cv2pixmap(self.captured_images[self.img_idx]))
 
             if self.zoom_point is not None:
                 hei, wid = self.captured_images[self.img_idx].shape
@@ -284,23 +302,23 @@ class DataCaptureForm(QtWidgets.QMainWindow, Ui_Dialog):
                 h_s = min(int(hei * self.zoom_point[1]), hei - hei_sm)
                 img_patch = self.captured_images[self.img_idx][h_s:h_s + hei_sm, w_s:w_s + wid_sm]
                 img_zoom = cv2.resize(img_patch, (wid, hei), interpolation=cv2.INTER_NEAREST)
-                self.ViewZoomCameraImage.setPixmap(plb.cv2pixmap(img_zoom))
+                self.ViewZoomCameraImage.setPixmap(cv2pixmap(img_zoom))
             else:
                 self.ViewZoomCameraImage.setText('NULL')
 
             if self.rect_para is not None:
                 img_rect = self._rectify(self.captured_images[self.img_idx], 'cam')
-                self.ViewCameraImageRect.setPixmap(plb.cv2pixmap(img_rect))
+                self.ViewCameraImageRect.setPixmap(cv2pixmap(img_rect))
 
         else:
             self.ViewCameraImage.setText('NULL')
 
         if len(self.pattern_list) > 0:
-            self.ViewProjectorPattern.setPixmap(plb.cv2pixmap(self.pattern_list[self.pat_idx]))
+            self.ViewProjectorPattern.setPixmap(cv2pixmap(self.pattern_list[self.pat_idx]))
 
             if self.rect_para is not None:
                 pat_rect = self._rectify(self.pattern_list[self.pat_idx], 'pro')
-                self.ViewProjectorPatternRect.setPixmap(plb.cv2pixmap(pat_rect))
+                self.ViewProjectorPatternRect.setPixmap(cv2pixmap(pat_rect))
 
         else:
             self.ViewProjectorPattern.setText('NULL')
@@ -320,7 +338,7 @@ class DataCaptureForm(QtWidgets.QMainWindow, Ui_Dialog):
         self.update_folders()
 
     def update_folders(self):
-        self.scene_folder = self.main_folder / f'scene_{self.scene_num:04}'
+        self.scene_folder = self.main_folder / f'scene_{self.scene_num:02}'
         # self.scene_folder = self.main_folder / f'seq_{self.scene_num:04}'
         self.pattern_folder = self.main_folder / 'pat'
         self.LabelMainFolderVis.setText(str(self.main_folder))
@@ -343,6 +361,8 @@ class DataCaptureForm(QtWidgets.QMainWindow, Ui_Dialog):
 
 
 def run_with_ui(argv):
+    QtWidgets.QApplication.setHighDpiScaleFactorRoundingPolicy(QtCore.Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
+    QtWidgets.QApplication.setAttribute(QtCore.Qt.AA_EnableHighDpiScaling)
     app = QtWidgets.QApplication(argv)
     main_win = DataCaptureForm()
     main_win.show()

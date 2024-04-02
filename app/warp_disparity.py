@@ -17,6 +17,7 @@ import numpy as np
 import torch
 
 from ui.warp_disparity import Ui_Dialog
+from app.data_capture import cv2pixmap
 
 
 # - Coding Part - #
@@ -55,7 +56,7 @@ class WarpDisparityForm(QtWidgets.QMainWindow, Ui_Dialog):
                 min_val = img.min() if min_val is None else min_val
                 max_val = img.max() if max_val is None else max_val
                 img_u8 = ((img - min_val) / (max_val - min_val) * 255.0).astype(np.uint8)
-                view_label.setPixmap(plb.cv2pixmap(img_u8, scale=2.0))
+                view_label.setPixmap(cv2pixmap(img_u8, scale=2.0))
 
         set_vis(self.captured_image, self.ViewCapturedImage, 0.0, 1.0)
         set_vis(self.pattern, self.ViewPattern, 0.0, 1.0)

@@ -19,7 +19,8 @@ import cv2
 import time
 
 from ui.calibration import Ui_Dialog
-from decoder.gray_phase import decode_all
+from app.data_capture import cv2pixmap
+from fpp_toolkit import MyGTCoder, MyMaskCoder
 
 
 # - Coding Part - #
@@ -35,21 +36,25 @@ def create_obj_corners(pattern_size, square_size):
     return obj_corner.reshape(-1, 1, 3)
 
 
-def detect_chessboard(scene_folder, pattern_size, coord_mats, proj_size):
-    img_folder = scene_folder / 'img_init'
-    img_num = len(list(img_folder.glob('*.png')))
-    img_white = plb.imload(img_folder / f'img_{41}.png', flag_tensor=False)
+def detect_chessboard(img_path, pattern_size, coord_mats, proj_size):
+    # img_num = len(list(img_folder.glob('*.png')))
+    # img_white = plb.imload(img_folder / f'img_{41}.png', flag_tensor=False)
+    img_white = plb.imload(img_path, flag_tensor=False)
     img_u8 = (img_white * 255.0).astype(np.uint8)
 
     # Detect chessboard in camera
     find_flag, corners = cv2.findChessboardCornersSB(img_u8, pattern_size)
 
     # Compute chessboard in projector
-    map_x = corners[:, :, 0]
-    map_y = corners[:, :, 1]
-    corner_x = cv2.remap(coord_mats[0], map_x, map_y, interpolation=cv2.INTER_LINEAR)
-    corner_y = cv2.remap(coord_mats[1], map_x, map_y, interpolation=cv2.INTER_LINEAR)
-    corners_proj = np.stack([corner_x, corner_y], axis=2)
+    if find_flag:
+        map_x = corners[:, :, 0]
+        map_y = corners[:, :, 1]
+        corner_x = cv2.remap(coord_mats[0], map_x, map_y, interpolation=cv2.INTER_LINEAR)
+        corner_y = cv2.remap(coord_mats[1], map_x, map_y, interpolation=cv2.INTER_LINEAR)
+        corners_proj = np.stack([corner_x, corner_y], axis=2)
+    else:
+        corners = np.zeros([pattern_size[0] * pattern_size[1], 1, 2], dtype=np.float32)
+        corners_proj = np.zeros_like(corners)
 
     # Draw images
     pat_u8 = np.ones(proj_size, dtype=np.uint8) * 64
@@ -66,7 +71,7 @@ class CalibrationForm(QtWidgets.QMainWindow, Ui_Dialog):
         # self.setFocusPolicy(QtCore.Qt.StrongFocus)
 
         # Data folders
-        self.main_folder = Path('C:/SLDataSet/TADE/0_Calib')
+        self.main_folder = Path('C:/SLDataSet/SLNeRF/ForCalib')
         self.scene_folders = []
         self.valid_flag = []
         self.pattern_folder = self.main_folder / 'pat'
@@ -92,7 +97,7 @@ class CalibrationForm(QtWidgets.QMainWindow, Ui_Dialog):
         self.PushButtonSave.clicked.connect(self.save_res)
         self.PushButtonNext.clicked.connect(lambda: self.change_current_idx(1))
         self.PushButtonPrevious.clicked.connect(lambda: self.change_current_idx(-1))
-        self.RadioButtonValid.clicked.connect(self.set_valid_tag)
+        self.CheckBoxValid.clicked.connect(self.set_valid_tag)
         self.HorizontalSliderAlpha.valueChanged.connect(self.rectify_images)
 
         # V
@@ -110,7 +115,7 @@ class CalibrationForm(QtWidgets.QMainWindow, Ui_Dialog):
         elif a0.text() == 'd':
             self.PushButtonNext.click()
         elif a0.text() == 'v':
-            self.RadioButtonValid.click()
+            self.CheckBoxValid.click()
         pass
 
     def print(self, out_str):
@@ -139,22 +144,52 @@ class CalibrationForm(QtWidgets.QMainWindow, Ui_Dialog):
         self.mask_occ.clear()
         for scene_folder in self.scene_folders:
             try:
-                if not self.RadioButtonDetectChessLoad.isChecked():
+                if not self.CheckBoxDetectChessLoad.isChecked():
                     raise IOError('Loaded not required.')
                 coord_wid = plb.imload(scene_folder / 'coord' / 'coord_x.png', scale=50.0, flag_tensor=False)
                 coord_hei = plb.imload(scene_folder / 'coord' / 'coord_y.png', scale=50.0, flag_tensor=False)
                 mask_occ = plb.imload(scene_folder / 'mask', flag_tensor=False)
             except IOError as e:
-                coord_wid, coord_hei, mask_occ = decode_all(scene_folder)
+                # Decode coord_wid, coord_hei, mask_occ
+                hei, wid = 800, 1280
+                coord_wid = MyGTCoder(hei, wid, 6, 40.0).decode(
+                    gray_pats=[scene_folder / 'img' / f'img_{tag}.png' for tag in [
+                        'gc0', 'gc1', 'gc2', 'gc3', 'gc4', 'gc5'
+                    ]],
+                    gray_pats_inv=[scene_folder / 'img' / f'img_{tag}.png' for tag in [
+                        'gc0inv', 'gc1inv', 'gc2inv', 'gc3inv', 'gc4inv', 'gc5inv'
+                    ]],
+                    phase_pats=[scene_folder / 'img' / f'img_{tag}.png' for tag in [
+                        'pm40n4i0', 'pm40n4i1', 'pm40n4i2', 'pm40n4i3'
+                    ]]
+                )[0]
+                coord_hei = MyGTCoder(hei, wid, 5, 50.0, wid_encode=False).decode(
+                    gray_pats=[scene_folder / 'img' / f'img_{tag}.png' for tag in [
+                        'gch0', 'gch1', 'gch2', 'gch3', 'gch4',
+                    ]],
+                    gray_pats_inv=[scene_folder / 'img' / f'img_{tag}.png' for tag in [
+                        'gch0inv', 'gch1inv', 'gch2inv', 'gch3inv', 'gch4inv',
+                    ]],
+                    phase_pats=[scene_folder / 'img' / f'img_{tag}.png' for tag in [
+                        'pmh50n4i0', 'pmh50n4i1', 'pmh50n4i2', 'pmh50n4i3'
+                    ]]
+                )[0]
+                mask_occ = MyMaskCoder(hei, wid, 0.1).decode(
+                    black=scene_folder / 'img' / 'img_uni0.png',
+                    white=scene_folder / 'img' / 'img_uni255.png'
+                )[0]
+
             self.coord_mats.append(np.stack([coord_wid, coord_hei], axis=0))
             self.mask_occ.append(mask_occ)
             self.print(f'Decoding {scene_folder.name}...')
 
         # 2. Get img_size & pat_size
-        sample_pat = plb.imload(self.pattern_folder / 'pat_0.png', flag_tensor=False)
+        sample_pat_name = list(self.pattern_folder.glob('pat_*.png'))[0]
+        sample_pat = plb.imload(sample_pat_name, flag_tensor=False)
         proj_size = sample_pat.shape[-2:]
         self.calibrated_res['RawCalib']['pat_size'] = f'{proj_size[1]},{proj_size[0]}'
-        sample_img = plb.imload(self.scene_folders[0] / 'img_init' / 'img_0.png', flag_tensor=False)
+        sample_img_name = list((self.scene_folders[0] / 'img').glob('img_*.png'))[0]
+        sample_img = plb.imload(sample_img_name, flag_tensor=False)
         cam_size = sample_img.shape[-2:]
         self.calibrated_res['RawCalib']['img_size'] = f'{cam_size[1]},{cam_size[0]}'
 
@@ -163,7 +198,7 @@ class CalibrationForm(QtWidgets.QMainWindow, Ui_Dialog):
         obj_corners = create_obj_corners(pattern_size, square_size)
         for coord_mat, scene_folder in zip(self.coord_mats, self.scene_folders):
             cam_corners, pro_corners, cam_viz, pro_viz = detect_chessboard(
-                scene_folder, pattern_size, coord_mat, proj_size
+                scene_folder / 'img/img_uni255.png', pattern_size, coord_mat, proj_size
             )
             self.corners.append((obj_corners, cam_corners, pro_corners))
             self.chessboard_camera.append(cam_viz)
@@ -323,29 +358,32 @@ class CalibrationForm(QtWidgets.QMainWindow, Ui_Dialog):
         else:
             self.current_idx = (self.current_idx + d_idx) % total_scene
             self.LabelStatus.setText(f'Current idx: {self.current_idx}')
-            self.RadioButtonValid.setChecked(True if self.valid_flag[self.current_idx] == 1 else False)
+            self.CheckBoxValid.setChecked(True if self.valid_flag[self.current_idx] == 1 else False)
             self.update_images()
         pass
 
     def set_valid_tag(self):
         if len(self.valid_flag) > 0:
-            self.valid_flag[self.current_idx] = 1 if self.RadioButtonValid.isChecked() else 0
+            self.valid_flag[self.current_idx] = 1 if self.CheckBoxValid.isChecked() else 0
             self.LabelSceneInfo.setText(f'Scene detected: {sum(self.valid_flag)}/{len(self.scene_folders)}')
 
     def update_images(self):
         def show_image_or_null(image_list, label_item, scale):
             if 0 <= self.current_idx < len(image_list):
-                label_item.setPixmap(plb.cv2pixmap(image_list[self.current_idx], scale))
+                label_item.setPixmap(cv2pixmap(image_list[self.current_idx], scale))
             else:
                 label_item.setText('NULL')
 
         show_image_or_null(self.chessboard_camera, self.ViewCameraImage, 4.0)
         show_image_or_null(self.chessboard_projector, self.ViewProjectorPattern, 4.0)
+        plb.imviz(self.chessboard_projector[self.current_idx], 'chess', 100)
         show_image_or_null(self.chessboard_camera_rect, self.ViewCameraImageRect, 4.0)
         show_image_or_null(self.chessboard_projector_rect, self.ViewProjectorPatternRect, 4.0)
 
 
 if __name__ == '__main__':
+    QtWidgets.QApplication.setHighDpiScaleFactorRoundingPolicy(QtCore.Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
+    QtWidgets.QApplication.setAttribute(QtCore.Qt.AA_EnableHighDpiScaling)
     app = QtWidgets.QApplication(sys.argv)
     main_win = CalibrationForm()
     main_win.show()

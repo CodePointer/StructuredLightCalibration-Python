@@ -14,6 +14,8 @@ from tqdm import tqdm
 import cv2
 import numpy as np
 import torch
+from configparser import ConfigParser
+import open3d as o3d
 
 import pointerlib as plb
 
@@ -21,7 +23,7 @@ import pointerlib as plb
 # - Coding Part - #
 class DisparityRefinement:
 
-    def __init__(self, seq_folder, pattern_name, pat_info_name, frm_start):
+    def __init__(self, seq_folder, pattern_name, pat_info_name, frm_start, disp_viz=None):
         # Load pattern
         self.seq_folder = seq_folder
         pat_raw = plb.imload(pattern_name, flag_tensor=False)
@@ -72,12 +74,9 @@ class DisparityRefinement:
         self.scale = 16
         self.img_left_up = (0, 0)
         self.pat_left_up = (0, 0)
-        
-        # self.win_name = 'Matching'
-        # self.delay = 100
-        # Create window set & set callback
-        # cv2.namedWindow(self.win_name)
-        # cv2.setMouseCallback(self.win_name, self.on_mouse)
+
+        # Visualizer
+        self.disp_viz = disp_viz
 
     def __del__(self):
         cv2.destroyWindow(self.win_img)
@@ -213,16 +212,22 @@ class DisparityRefinement:
                 pat_idx = self.pair[0]
                 self.pt_match[pat_idx][0] = False
         elif key == ord('p'):   # Print
-            print(self.pair)
+            if self.disp_viz is not None:
+                disp_mat = self._generate_disp_mat()
+                self.disp_viz.run(disp_mat)
         elif key == ord(' '):     # save
             # Save to disp_gt
-            disp_mat = np.zeros([self.hei, self.wid], dtype=np.float32)
-            for pat_idx in range(1, self.pt_pro_len):
-                flag, _, cam_x, cam_y, disp = self.pt_match[pat_idx]
-                if flag:
-                    disp_mat[cam_y, cam_x] = disp
+            disp_mat = self._generate_disp_mat()
             disp_gt_file = self.seq_folder / 'disp_gt' / f'disp_{self.frm_idx}.png'
             plb.imsave(disp_gt_file, disp_mat, scale=1e2, img_type=np.uint16, mkdir=True)
+
+    def _generate_disp_mat(self):
+        disp_mat = np.zeros([self.hei, self.wid], dtype=np.float32)
+        for pat_idx in range(1, self.pt_pro_len):
+            flag, _, cam_x, cam_y, disp = self.pt_match[pat_idx]
+            if flag:
+                disp_mat[cam_y, cam_x] = disp
+        return disp_mat
 
     def get_color(self, pat_idx):
         if self.color_list is None:
@@ -321,15 +326,47 @@ class DisparityRefinement:
                 self.on_keyboard(key)
 
 
+class DisparityVisualizer:
+
+    def __init__(self, config_file):
+        config = ConfigParser()
+        config.read(str(config_file), encoding='utf-8')
+        calib_tag = config['Data']['calib_tag']
+        focal_len = float(config[calib_tag]['focal_len'])
+        baseline = float(config[calib_tag]['baseline'])
+        _, _, dx, dy = plb.str2tuple(config[calib_tag]['img_intrin'], item_type=float)
+        wid, hei = plb.str2tuple(config[calib_tag]['img_size'], item_type=int)
+
+        self.dx = dx
+        self.dy = dy
+        self.f = focal_len
+        self.b = baseline
+
+    def run(self, disp_mat):
+        h_vec, w_vec = np.where(disp_mat > 0)
+        disp_vec = disp_mat[h_vec, w_vec]
+        zz = self.f * self.b / disp_vec
+        xx = (w_vec.astype(np.float32) - self.dx) / self.f * zz
+        yy = (h_vec.astype(np.float32) - self.dy) / self.f * zz
+        xyz_np = np.stack([xx, yy, zz], axis=1)
+        pcd = o3d.geometry.PointCloud()
+        pcd.points = o3d.utility.Vector3dVector(xyz_np)
+        o3d.visualization.draw_geometries([pcd])
+
+
 if __name__ == '__main__':
     # fix_disparity(
     #     data_path=Path('C:/SLDataSet/TADE/52_RealData')
     # )
+    visualizer = DisparityVisualizer(
+        config_file=Path('C:/SLDataSet/TADE/52_RealData/config.ini')
+    )
     app = DisparityRefinement(
-        seq_folder=Path('E:/SLDataSet/TADE/52_RealData/scene_0003'),
-        pattern_name=Path('E:/SLDataSet/TADE/52_RealData/pat/pat_0.png'),
-        pat_info_name=Path('E:/SLDataSet/TADE/info.pt'),
-        frm_start=250,
+        seq_folder=Path('C:/SLDataSet/TADE/52_RealData/scene_0002'),
+        pattern_name=Path('C:/SLDataSet/TADE/52_RealData/pat/pat_0.png'),
+        pat_info_name=Path('C:/SLDataSet/TADE/info.pt'),
+        frm_start=255,
+        disp_viz=visualizer,
     )
     app.run()
 

@@ -19,6 +19,7 @@ import cv2
 import time
 
 from ui.pattern_recast import Ui_Dialog
+from app.data_capture import cv2pixmap
 from encoder.generate_pattern import generate_all, generate_base_pats
 
 
@@ -141,7 +142,7 @@ class PatternRecastForm(QtWidgets.QMainWindow, Ui_Dialog):
 
     def update_images(self):
         if self.mask_pattern is not None:
-            self.ViewMaskPattern.setPixmap(plb.cv2pixmap(self.mask_pattern, 4.0))
+            self.ViewMaskPattern.setPixmap(cv2pixmap(self.mask_pattern, 4.0))
         if self.resized_pattern is not None:
             h_src, w_src = self.left_up_pos
             h_dst = min(self.resized_pattern.shape[0] + h_src, self.mask_pattern.shape[0])
@@ -149,7 +150,7 @@ class PatternRecastForm(QtWidgets.QMainWindow, Ui_Dialog):
             self.exp_pattern = np.zeros_like(self.mask_pattern)
             self.exp_pattern[h_src:h_dst, w_src:w_dst] = self.resized_pattern[:h_dst - h_src, :w_dst - w_src]
             self.exp_pattern[self.mask_pattern == 0] = 0
-            self.ViewAdjustPattern.setPixmap(plb.cv2pixmap(self.exp_pattern, 4.0))
+            self.ViewAdjustPattern.setPixmap(cv2pixmap(self.exp_pattern, 4.0))
 
     def recast_save(self):
         src_list = [self.exp_pattern]
